@@ -183,7 +183,7 @@ mysql> select * from t1 where number = 5 and hoge = 2 for update;
 +----+--------+------+
 | id | number | hoge |
 +----+--------+------+
-|  1 |      1 |    2 |
+|  2 |      5 |    2 |
 +----+--------+------+
 1 rows in set (0.00 sec)
 ```
