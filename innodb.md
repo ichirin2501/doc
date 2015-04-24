@@ -380,6 +380,10 @@ player_quest_nonauto` (
 ### ギャップロックの罠
 >ギャップロックはギャップロックをブロックしない（排他的ロックだけど...)  
 
+良い資料  
+* [MySQL InnoDBのinsertとlockの話](http://tech.voyagegroup.com/archives/8085782.html)  
+
+
 例を見たほうが早いですね
 ```text
 CREATE TABLE `t4` (
