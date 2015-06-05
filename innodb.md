@@ -6,7 +6,7 @@
 * [ロックの種類](#ロックの種類)
 * [行ロックについて](#行ロックについて)
 * [シャドーロックについて](#シャドーロックについて)
-* [Index Condition Pushdown(MySQL-5.6)](#Index Condition Pushdown)
+* [Index Condition Pushdown(MySQL-5.6)](#index-condition-pushdown)
 * [あるあるロック問題](#あるあるロック問題)
 * [パーティション下のロックの挙動](#パーティション下のロックの挙動)
 
