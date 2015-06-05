@@ -6,6 +6,7 @@
 * [ロックの種類](#ロックの種類)
 * [行ロックについて](#行ロックについて)
 * [シャドーロックについて](#シャドーロックについて)
+* [Index Condition Pushdown(MySQL-5.6)](#Index Condition Pushdown)
 * [あるあるロック問題](#あるあるロック問題)
 * [パーティション下のロックの挙動](#パーティション下のロックの挙動)
 
@@ -17,6 +18,7 @@ RDBSのMySQL(InnoDBストレージエンジン)を利用するうえで、高速
 ロックの挙動を詳しく知る必要があります。この文章はそのために調査したメモ書きです。  
 また、掲載されている内容が正しいとは限りません、真実は自らの手で摑み取ってください。  
 ロックの挙動についてはmysql-5.5.27,**REPEATABLE READ** で調べたものです。  
+Index Condition Pushdownについてはmysql-5.6.24で調べたものになります。  
 READ COMMITEDは気が向いたら書きます。  
 
 
@@ -557,6 +559,101 @@ TC!> ERROR 1213 (40001): Deadlock found when trying to get lock; try restarting 
 原因は先程のケースと同じである。  
 実際あまり意識する機会はないかもしれないが、待たされているからと言って、  
 ロックを獲得していないとは限らない。  
+
+
+## Index Condition Pushdown
+### Index Condition Pushdownとは  
+略してICP, MySQL 5.6, MariaDB 5.3.3から追加されたクエリ高速化のための機能で、  
+デフォルトだとONに設定されており、EXPLAINだとExtra項目に Using index condition と表示される。  
+複合index(ex: col1, col2, col3)でWHERE条件を定義された順に指定しなくても部分的に機能する。  
+奥野幹也さんの[こちらの記事](http://enterprisezine.jp/dbonline/detail/3606?p=3)を読んでください。
+
+### ICPの注意点  
+
+* セカンダリインデックスによる検索しか意味がない
+* Covering Indexになる場合も意味がない
+* SELECT文にしか作用しない(MySQL 5.6.24現在)
+* ロックの挙動に癖がある
+
+### ICPのロック挙動の説明  
+こちらもREPEATABLE-READで検証を行った。  
+以下は検証データ  
+```text
+CREATE TABLE `icp_test` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `col1` bigint(20) unsigned NOT NULL,
+  `col2` bigint(20) unsigned NOT NULL,
+  `col3` bigint(20) unsigned NOT NULL,
+  `value` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `icp_text_idx_col1_col2_col3` (`col1`,`col2`,`col3`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+
+mysql> select * from icp_test;
++-------+------+------+------+-------+
+| id    | col1 | col2 | col3 | value |
++-------+------+------+------+-------+
+| 11251 |    1 |    1 |    1 |  NULL |
+| 11252 |    1 |    1 |    2 |  NULL |
+| 11253 |    1 |    1 |    3 |  NULL |
+| 11254 |    1 |    1 |    4 |  NULL |
+| 11255 |    1 |    1 |    5 |  NULL |
+| 11256 |    2 |    1 |    1 |  NULL |
+| 11257 |    2 |    1 |    2 |  NULL |
+| 11258 |    2 |    1 |    3 |  NULL |
+| 11259 |    2 |    1 |    4 |  NULL |
+| 11260 |    2 |    1 |    5 |  NULL |
+...
+
+mysql> EXPLAIN SELECT * FROM icp_test WHERE col1 = 1 AND col3 = 2;
++----+-------------+----------+------+-----------------------------+-----------------------------+---------+-------+------+-----------------------+
+| id | select_type | table    | type | possible_keys               | key                         | key_len | ref   | rows | Extra                 |
++----+-------------+----------+------+-----------------------------+-----------------------------+---------+-------+------+-----------------------+
+|  1 | SIMPLE      | icp_test | ref  | icp_text_idx_col1_col2_col3 | icp_text_idx_col1_col2_col3 | 8       | const |    5 | Using index condition |
++----+-------------+----------+------+-----------------------------+-----------------------------+---------+-------+------+-----------------------+
+1 row in set (0.00 sec)
+```
+今まではセカンダリインデックスからのロックでは実際に引いてくる行だけでなく、  
+セカンダリインデックスから走査したクラスタインデックスの行全てロックされていたが、  
+ICPが効く場合は実際に引いてきたクラスタインデックスの行のみをロックするようになる。  
+```text
+TA> BEGIN;
+TB> BEGIN;
+TA> SELECT * FROM icp_test WHERE col1 = 1 AND col3 = 2 FOR UPDATE; # 1行だけhit
++-------+------+------+------+-------+
+| id    | col1 | col2 | col3 | value |
++-------+------+------+------+-------+
+| 11252 |    1 |    1 |    2 |  NULL |
++-------+------+------+------+-------+
+1 row in set (0.03 sec)
+
+TB> SELECT * FROM icp_test WHERE id = 11251 FOR UPDATE; # 今まではこれも待たされてたが、ICPだとロックされてない
++-------+------+------+------+-------+
+| id    | col1 | col2 | col3 | value |
++-------+------+------+------+-------+
+| 11251 |    1 |    1 |    1 |  NULL |
++-------+------+------+------+-------+
+1 row in set (0.00 sec)
+
+TB> SELECT * FROM icp_test WHERE id = 11252 FOR UPDATE; # 待たされる
+```
+通常のindexやunique-indexなどのセカンダリインデックスによる条件のロック範囲は狭くなっていると言える。  
+しかし、クラスタインデックス側のロック範囲が狭くなっているだけに過ぎない。  
+セカンダリインデックス側はロックされて、クラスタインデックス側はロックされてない場合、  
+FOR-UPDATEでロックを獲得していても実際の更新時に待たされる問題が発生する。  
+```text
+TA> BEGIN;↲
+TB> BEGIN;↲
+TA> SELECT * FROM icp_test WHERE col1 = 1 AND col3 = 2 FOR UPDATE; # 1行だけhit↲
+TB> SELECT * FROM icp_test WHERE id = 11251 FOR UPDATE; # 今まではこれも待たされてたが、ICPだとロックされてない↲
+TB> UPDATE icp_test SET col2 = 2 WHERE id = 11251; # 待たされる
+```
+これはTA側でcol1=1のセカンダリインデックスは全てロックされているため、  
+id=11251もそれに含まれており、クラスタインデックス指定のFOR-UPDATEでロック獲得できても  
+セカンダリインデックスに作用する更新処理は待たされてしまう。  
+FOR-UPDATEでロック獲得したのにUPDATE文で待たされるという期待しない動作に繋がるため注意が必要である。  
+ICPに限らず、セカンダリインデックスからのロックは期待しない動作になりがちなので、  
+ロックはクラスタインデックスの条件指定のほうが安全でしょう。  
 
 
 ## あるあるロック問題
