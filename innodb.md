@@ -970,7 +970,7 @@ CREATE TABLE `range_test01` (
 
 # 
 mysql> SELECT * FROM range_test01 WHERE id = 80 FOR UPDATE;
-# 空打ち、id = [71,100) の範囲にギャップロック.
+# 空打ち、id = [71,108) の範囲にギャップロック.
 
 mysql> SELECT * FROM range_test01 WHERE id < 80 FOR UPDATE;
 # 範囲ロックなので、id = [-inf, 108] の区間を排他的ロック
@@ -1007,7 +1007,8 @@ mysql> SELECT * FROM range_test01 WHERE id = 80 FOR UPDATE;
 mysql> SELECT * FROM range_test01 WHERE id < 80 FOR UPDATE;
 # 範囲ロックなので、id = [-inf, 100) の区間を排他的ロック
 
-# 刈り込みされていると、パーティションを跨ぐようなロックはかかりません.
+# 上記のようなロックで、対象のギャップがパーティションで区切られている場合、
+# それを跨ぐようなロックはかかりません.
 
 mysql> EXPLAIN PARTITIONS SELECT * FROM range_test01 WHERE id < 80 FOR UPDATE;
 +----+-------------+--------------+--------------+-------+---------------+---------+---------+------+------+-------------+
