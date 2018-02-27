@@ -140,10 +140,6 @@ TA> select * from t1 where id = 2;
 * [ALTER TABLEを上手に使いこなそう。 - 漢のコンピュータ道](http://nippondanji.blogspot.jp/2009/05/alter-table.html)
 * [開発スピードアクセル全開ぶっちぎり！日本よ、これがMySQL 5.6だッ！！ - 漢のコンピュータ道](http://nippondanji.blogspot.jp/2012/10/mysql-56.html)
 
->MySQL 5.6ではALTER TABLE...ADD INDEX/DROP INDEX中であっても参照・更新共に実行可能になったのである。
-
-最高ですね！  
-MySQL5.6から変更内容によってはブロックせずに済むらしい（そのうちまとめます）   
 MySQL5.5以下ならこんな感じ、たぶん。  
 
 * テーブルを共有ロック
@@ -159,6 +155,11 @@ MySQL5.5以下ならこんな感じ、たぶん。
 > alter table t2 ~; # この時点でalter実行前に暗黙commitが走るので t1に対するupdateもcommitされる
 > rollback; # alterの内容は勿論、t1へのupdateもrollbackされない
 ```
+
+ちなみにMySQL-5.6からはALTER TABLE実行中でもテーブルの更新が出来るオンラインDDL機能が追加された、便利。  
+オンラインDDLとして実行出来るALTER文には条件があり、それは[こちらの公式ドキュメント](https://dev.mysql.com/doc/refman/5.6/ja/innodb-create-index-overview.html)を読めば分かるようになっている。  
+覚えたり毎回確認するのは面倒なので、LOCK=NONEを付けて試すことによってオンラインDDLかどうかを簡単に確かめることが出来る。以下のyoku0825先生の記事にまとまっている。  
+* [そのALTER TABLEがオンラインALTER TABLEかどうかを確かめる方法](https://yoku0825.blogspot.jp/2016/06/alter-tablealter-table.html)
 
 
 ## 行ロックについて
