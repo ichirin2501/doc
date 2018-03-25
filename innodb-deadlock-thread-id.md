@@ -153,10 +153,10 @@ ROLLBACK /* added by mysqlbinlog */;
 
 `show engine innodb status\G`の`LATEST DETECTED DEADLOCK`ではトランザクション1で`UPDATE t1 SET number = 7777 WHERE id = 750`が実行されたログしかなかったが、binlogからはそのクエリより前に実行された`UPDATE t1 SET number = 777 WHERE id = 30`がログに残されている。
 
-thread-idを使った調査前  
+### thread-idを使った調査前  
 ![tx-before](images/innodb-deadlock-thread-id-01.png)
 
-thread-idを使った調査後  
+### thread-idを使った調査後  
 ![tx-after](images/innodb-deadlock-thread-id-02.png)
 
 以上より、トランザクション2側のロック待ち①はトランザクション1側の`UPDATE t1 SET number = 777 WHERE id = 30`が直接的な原因である、という仮説が立てられるようになる。失敗したトランザクション2はbinlogに残らないため、トランザクション1側のロック待ち②については不明瞭なままである。  
