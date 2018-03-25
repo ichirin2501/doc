@@ -1,8 +1,6 @@
 スレッドIDを利用したMySQLのデッドロック解析手法
 ----
 
-https://hatenainfra.g.hatena.ne.jp/ichirin2501/20180104/1515044195
-
 ## TL;DR
 - `thread_id`を使ってbinlogを調査すればデッドロックが発生したトランザクションの更新クエリがわかる(かも
 
