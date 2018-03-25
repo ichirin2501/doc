@@ -10,7 +10,7 @@
 - [検証データセット](#検証データセット)
 - [1. binlog_format=STATEMENTで検証](#binlog_format=STATEMENTで検証)
 - [2. binlog_format=ROWで検証](#binlog_format=ROWで検証)
-- [参考文献?]
+- [参考資料](#参考資料)
 
 ## はじめに
 これはMySQL(InnoDB)のログに記録されたthread_idを利用して既に発生したデッドロックの解析手法を紹介する内容である。`show engine innodb status\G`などの`LATEST DETECTED DEADLOCK`だけでは、トランザクション全容の情報に欠け、間接的にデッドロックの原因となったクエリがわからないことがある。そのため、その情報だけでは実際にクエリを発行しているアプリケーションロジック側をどのように修正すればよいのかわからず、解決が難しいという問題がある。今回紹介するthread_idを利用した解析手法では、成功したトランザクション処理を追うことでデッドロック解決に役立つ情報が増えるメリットがある。それとは別に全トランザクション処理のクエリログを収集出来るオプション(general_log)もある。これを有効にすると負荷が大きく、本番稼動している現場のMySQLでは通常はOFFにするため、デッドロック発生時のトランザクション情報は収集出来ない。そのような現場のMySQLでも冗長化のためにレプリケーション構成を取られることが多く、構築過程でbinlogを生成するオプションを有効にするので、今回紹介する解析手法が使える。MySQLのデッドロック解析手法は他でも解説されているが、今のところ日本語の情報でthread_idを利用した方法については述べられてないように思ったので改めて紹介したい。これを利用してデッドロックの原因を突き止め、一つでも多くのトランザクション処理がエラーにならないことを祈る。
@@ -154,10 +154,10 @@ ROLLBACK /* added by mysqlbinlog */;
 `show engine innodb status\G`の`LATEST DETECTED DEADLOCK`ではトランザクション1で`UPDATE t1 SET number = 7777 WHERE id = 750`が実行されたログしかなかったが、binlogからはそのクエリより前に実行された`UPDATE t1 SET number = 777 WHERE id = 30`がログに残されている。
 
 thread-idを使った調査前  
-![tx-before](doc/images/innodb-deadlock-thread-id-01.png =600x)
+![tx-before](doc/images/innodb-deadlock-thread-id-01.png)
 
 thread-idを使った調査後  
-![tx-after](doc/images/innodb-deadlock-thread-id-02.png =600x)
+![tx-after](doc/images/innodb-deadlock-thread-id-02.png)
 
 以上より、トランザクション2側のロック待ち①はトランザクション1側の`UPDATE t1 SET number = 777 WHERE id = 30`が直接的な原因である、という仮説が立てられるようになる。失敗したトランザクション2はbinlogに残らないため、トランザクション1側のロック待ち②については不明瞭なままである。  
 また、binlogには成功したトランザクション処理、さらには更新系クエリのログしか記録されない。そのため、次のような参照の明示的なロック獲得はthread_idを利用した解析方法では追うことが出来ない。
@@ -292,10 +292,5 @@ DELIMITER ;
 `binlog_format=STATEMENT`と少し異なるがthread_idはトランザクション開始地点(at 120)に記録されている。直近のCOMMITまでのログに異なるthread_idの差分内容が突然混ざることはないはず(要出典)なので、解析は可能である。  
 ただし、先に挙げたSELECT-FOR-UPDATEによる明示的なロックによるデッドロックと、変更差分がないような更新クエリは`binlog_format=ROW`ではログに出力されない。特に後者はROWのみに発生するため、注意が必要である。
 
-
-
-
-- STATEMENTは実行されたSQL文をロギングするので、値に変更がなくてもログが出力される。
-- row-baseだと 更新が発生してないのでログは出力されてない <- まじで
-
-
+## 参考資料
+- Percona Database Performance Blog (2014) - [How to deal with MySQL deadlocks](https://www.percona.com/blog/2014/10/28/how-to-deal-with-mysql-deadlocks/)
