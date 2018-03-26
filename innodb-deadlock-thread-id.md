@@ -37,9 +37,7 @@ CREATE TABLE t1 (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 ROW_FORMAT=DYNAMIC;
 EOF
 
-for i in $(seq 1 1000); do
-  echo "INSERT INTO t1 (number) VALUES ($i);"
-done | mysql test
+{ echo -n "INSERT INTO t1 (number) VALUES "; echo -n \({1..1000}\) | tr ' ' ','; } | mysql test
 ```
 
 対象テーブルの行数が少なすぎるとオプティマイザがフルスキャン判断をする場合があるので、行数を多めに用意する。
