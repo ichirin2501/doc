@@ -288,7 +288,8 @@ DELIMITER ;
 ```
 
 `binlog_format=STATEMENT`と少し異なるがthread_idはトランザクション開始地点(at 120)に記録されている。直近のCOMMITまでのログに異なるthread_idの差分内容が突然混ざることはないはず(要出典)なので、解析は可能である。  
-ただし、先に挙げたSELECT-FOR-UPDATEによる明示的なロックによるデッドロックと、変更差分がないような更新クエリは`binlog_format=ROW`ではログに出力されない。特に後者はROWのみに発生するため、注意が必要である。
+ただし、先に挙げたSELECT-FOR-UPDATEによる明示的なロックによるデッドロックと、変更差分がないような更新クエリは`binlog_format=ROW`ではログに出力されない。特に後者はROWのみに発生するため、注意が必要である。  
+また、これはMySQLのバグだが、`show engine innodb status\G`で表示されたthread_idが32bit符号なし整数の範囲を超えている場合、binlogに記録されるthread_idはunsigned int型のため、オーバーフローした値として記録されてしまっている。そのときは`show engine innodb status\G`で確認したthread_id値をunsigned int型に変換した値を検索すれば発見出来る。
 
 ## 参考資料
 - Percona Database Performance Blog (2014) - [How to deal with MySQL deadlocks](https://www.percona.com/blog/2014/10/28/how-to-deal-with-mysql-deadlocks/)
